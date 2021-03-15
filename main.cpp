@@ -8,12 +8,12 @@
 using namespace std;
 const int N = 105;
 const int M = 105;
-const int Questions = 15;
+const int Questions = 7;
 const bool Details = 0;
 
 class mdp
 {
-	int n,m;	// n is the number of actions, and m is the number of states
+	int n,m,d;	// n is the number of actions, and m is the number of states
 	double p[M][N][M];	// p_{ijk} is the probability that transform from state i to state k, after action j, 
 	double y[M];	// y_i is the cost-to-go value in state i
 	double y0[M];	// y_0
@@ -21,7 +21,7 @@ class mdp
 	double gamma;	// gamma is the discount factor
 	bool A[M][N];	// A_{ij} denote whether action j is available on state i
 	double temp[N+M];	// for intermediate result
-	bool tempbool[N+M];
+	bool tempbool[N+M], tempboolx[N+M];
 	
 	
 	public:
@@ -34,6 +34,39 @@ class mdp
 	void setM(int x)
 	{
 		m=x;
+	}
+	
+	void setD(int x)
+	{
+		d=x;
+		setM(d*d);
+	}
+	
+	int cz(int x,int y)
+	{
+		return((x-1)*d+y);
+	}
+	
+	int cx(int x)
+	{
+		return((x+d-1)/d);
+	}
+	
+	int cy(int x)
+	{
+		return((x-1)%d+1);
+	}
+	
+	int abss(int x)
+	{
+		if(x<0)
+			x=-x;
+		return x;
+	}
+	
+	bool neighbor(int x,int y)
+	{
+		return ( (abss(cx(x)-cx(y))+ abss(cy(x)-cy(y)) ) == 1);
 	}
 	
 	void randomP()
@@ -58,11 +91,10 @@ class mdp
 		}
 	}
 	
-	void stateIndP()
+	void randomPMaze()
 	{
 		int i,j,k;
-		//for(i=1;i<=m;i++)
-		i=1;
+		for(i=1;i<=m;i++)
 		{
 			for(j=1;j<=n;j++)
 			{
@@ -71,7 +103,10 @@ class mdp
 				{
 					for(k=1;k<=m;k++)
 					{
-						p[i][j][k]=rand();
+						if(neighbor(i,k))
+							p[i][j][k]=rand();
+						else
+							p[i][j][k]=0;
 						tot+=p[i][j][k];
 					}
 				}
@@ -79,40 +114,33 @@ class mdp
 					p[i][j][k]/=tot;
 			}
 		}
-		for(i=2;i<=m;i++)
-		{
-			for(j=1;j<=n;j++)
-			{
-				for(k=1;k<=m;k++)
-					p[i][j][k]=p[1][j][k];
-			}
-		}
-		printf("Have set the transition probability state-independently\n\n");
 	}
 	
 	
 	
-	void detP()
+	void randomA()
 	{
-		int i,j,k;
+		int i,j;
 		for(i=1;i<=m;i++)
 		{
-			for(j=1;j<=n;j++)
+			int tot=0;
+			while(!tot)
 			{
-				int v=rand()%m+1;
-				for(k=1;k<=m;k++)
+				for(j=1;j<=n;j++)
 				{
-					if(k==v)
-						p[i][j][k]=1.0;
+					if(rand()&1)
+					{
+						A[i][j]=1;
+						tot++;
+					}
 					else
-						p[i][j][k]=0.0;
+						A[i][j]=0;
 				}
 			}
 		}
-		printf("Have set the transformation deterministic\n\n");
 	}
 	
-	void randomA()
+	void randomAMaze()
 	{
 		int i,j;
 		for(i=1;i<=m;i++)
@@ -212,16 +240,19 @@ class mdp
 		return m;
 	}
 	
-	void initY()
+	void initY(bool print)
 	{
 		int i;
-		printf("y[%d]=  ",0);
+		if(print)
+			printf("y[%d]=  ",0);
 		for(i=1;i<=m;i++)
 		{
 			y[i]=y0[i];
-			printf("%.6f ",y[i]);
+			if(print)
+				printf("%.6f ",y[i]);
 		}
-		printf("\n");
+		if(print)
+			printf("\n");
 	}
 	
 	void printYSimple()
@@ -239,7 +270,7 @@ class mdp
 		int i,j,k,l;
 		
 		
-		initY();
+		initY(1);
 		
 		printf("VI:\n");
 		
@@ -281,7 +312,7 @@ class mdp
 		int i,j,k,l,icnt;
 		
 		
-		initY();
+		initY(Details);
 		
 		printf("RandomVI with sample size %d:\n", sampleSize);
 		
@@ -322,7 +353,75 @@ class mdp
 			}
 		}
 		
-		printf("\n");
+		if(Details)
+			printf("\n");
+	}
+	
+	
+	void RandomVIInfluence(int rounds, bool print, int sampleSize)
+	{
+		
+		int i,j,k,l,icnt;
+		bool relate;
+		
+		
+		initY(Details);
+		
+		printf("RandomVI based on influence tree with sample size %d:\n", sampleSize);
+		
+		
+		for(i=1;i<=m;i++)
+			tempbool[i]=1;
+		
+		for(j=1;j<=rounds;j++)
+		{
+			for(i=1;i<=m;i++)
+				temp[i]=y[i];
+			for(i=1;i<=m;i++)
+				tempboolx[i]=tempbool[i];
+			memset(tempbool,0,sizeof tempbool);
+			tempbool[0]=1;
+			for(icnt=1;icnt<=sampleSize;icnt++)
+			{
+				relate=0;
+				i=rand()%(m+1);
+				while(tempbool[i] || !relate)
+				{
+					i=rand()%(m+1);
+					for(k=1;k<=m;k++)
+					{
+						if( tempboolx[k] && neighbor(i,k) )		//This is special for the maze game.
+							relate=1;
+					}
+				}
+				tempbool[i]=1;
+				
+				double nowx=1e100;
+				for(k=1;k<=n;k++)
+				{
+					if(!A[i][k])
+						continue;
+					double now=c[k];
+					for(l=1;l<=m;l++)
+						now+=gamma*p[i][k][l]*y[l];
+					nowx=min(nowx,now);
+				}
+				temp[i]=nowx;
+			}
+			for(i=1;i<=m;i++)
+			{
+				y[i]=temp[i];
+			}
+			if(print || j==rounds)
+			{
+				printf("y[%d]=  ",j);
+				printYSimple();
+				printf("\n");
+			}
+		}
+		
+		if(Details)
+			printf("\n");
 	}
 	
 	
@@ -332,7 +431,7 @@ class mdp
 		int i,j,k,l;
 		
 		
-		initY();
+		initY(Details);
 		
 		printf("CyclicVI:\n");
 		
@@ -370,7 +469,7 @@ class mdp
 		int i,j,k,l,icnt;
 		
 		
-		initY();
+		initY(Details);
 		
 		printf("RPCyclicVI:\n");
 		
@@ -412,9 +511,18 @@ class mdp
 	
 	mdp()
 	{
+		/*****
 		setN(10);
 		setM(10);
 		randomP();
+		randomC();
+		randomGamma();
+		randomA();
+		*****/
+		
+		setN(10);
+		setD(3);	// d*d states, here d=3, a 3*3 maze
+		randomPMaze();
 		randomC();
 		randomGamma();
 		randomA();
@@ -423,13 +531,14 @@ class mdp
 
 void init()
 {
-	srand(time(0));
+	//srand(time(0));
+	srand(0);
 	rand();
 }
 
 int main()
 {
-	//freopen("out.txt","w",stdout);
+	freopen("out.txt","w",stdout);
 	
 	init();
 	static mdp a;
@@ -449,7 +558,10 @@ int main()
 		int i;
 		int m=a.getm();
 		for(i=1;i<=m;i++)
+		{
 			a.RandomVI(100,Details,i);
+			a.RandomVIInfluence(100,Details,i);
+		}
 		
 		printf("\n\n********************\n");
 	}
@@ -506,39 +618,5 @@ int main()
 	
 	
 	
-	/**********     Problem 7     **********/
-	
-	{
-	if(Questions&8)
-	{
-		printf("Question 7:\n\n");
-		
-		a.setSameY0(0.0);
-		//a.printP();
-		//a.printC();
-		//a.printGamma();
-		a.VI(20,Details);
-		//a.RandomVI(20,Details,a.getm()/3);
-		//a.CyclicVI(20,Details);
-		//a.RPCyclicVI(20,Details);
-		
-		a.stateIndP();
-		a.VI(20,Details);
-		//a.RandomVI(20,Details,a.getm()/3);
-		//a.CyclicVI(20,Details);
-		//a.RPCyclicVI(20,Details);
-		
-		a.detP();
-		a.VI(20,Details);
-		//a.RandomVI(20,Details,a.getm()/3);
-		//a.CyclicVI(20,Details);
-		//a.RPCyclicVI(20,Details);
-		
-		printf("\n\n********************\n");
-	}
-	}
-	
-	
-	/**********        end        **********/
 	return 0;
 }
